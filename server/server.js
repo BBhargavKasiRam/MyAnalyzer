@@ -24,11 +24,19 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, postman) or matching allowedOrigins
-    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+    // Allow requests with no origin (like mobile apps, curl, postman)
+    if (!origin) return callback(null, true);
+
+    // Allow in non-production, when origin matches allowedOrigins, or if origin is a vercel.app domain
+    if (
+      process.env.NODE_ENV !== 'production' ||
+      allowedOrigins.includes(origin) ||
+      origin.endsWith('.vercel.app') ||
+      !process.env.CLIENT_URL
+    ) {
       return callback(null, true);
     }
-    return callback(null, true); // Permissive in dev, configurable in prod
+    return callback(null, true);
   },
   credentials: true
 }));
