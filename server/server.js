@@ -99,8 +99,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start standalone server only when executed directly
-if (require.main === module) {
+// Start standalone server when executed directly or via startup wrapper
+if (require.main === module || require.main?.filename?.includes('server')) {
   connectDB().then(() => {
     initCron();
     app.listen(PORT, () => {
