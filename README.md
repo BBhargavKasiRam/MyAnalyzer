@@ -100,7 +100,7 @@ MyAnalyzer/
    - **Build Command:** `npm run build`
    - **Output Directory:** `dist`
 4. Under **Environment Variables**, add:
-   - `VITE_API_URL`: `https://myanalyzer-api.onrender.com/api` *(Your Render backend URL with `/api`)*
+   - `BACKEND_URL`: `https://myanalyzer-d3tb.onrender.com` *(Your Render backend URL)*
 5. Click **Deploy**.
    Vercel will give you your live frontend URL, for example: `https://myanalyzer.vercel.app`.
 
@@ -115,4 +115,4 @@ MyAnalyzer/
 - `SYNC_CRON_SCHEDULE`: Cron pattern for automatic periodic syncs (default: `0 */6 * * *` - every 6 hours).
 
 ### Frontend (`client/`)
-- `VITE_API_URL`: URL pointing to your Express API on Render (e.g. `https://myanalyzer-api.onrender.com/api`).
+- `BACKEND_URL`: URL pointing to your Express API on Render (e.g. `https://myanalyzer-d3tb.onrender.com`). No `VITE_` prefix required!

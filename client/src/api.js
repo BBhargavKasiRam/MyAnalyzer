@@ -1,7 +1,12 @@
 import axios from 'axios';
 
-// Normalize baseURL so that both https://host and https://host/api work seamlessly
-let rawBaseURL = import.meta.env.VITE_API_URL || '/api';
+// Supports BACKEND_URL (non-VITE prefix), __BACKEND_URL__ injected at build, or /api fallback
+let rawBaseURL =
+  (typeof __BACKEND_URL__ !== 'undefined' && __BACKEND_URL__) ||
+  import.meta.env.BACKEND_URL ||
+  import.meta.env.VITE_API_URL ||
+  '/api';
+
 if (rawBaseURL.startsWith('http')) {
   rawBaseURL = rawBaseURL.replace(/\/+$/, '');
   if (!rawBaseURL.endsWith('/api')) {
