@@ -1,7 +1,16 @@
 import axios from 'axios';
 
+// Normalize baseURL so that both https://host and https://host/api work seamlessly
+let rawBaseURL = import.meta.env.VITE_API_URL || '/api';
+if (rawBaseURL.startsWith('http')) {
+  rawBaseURL = rawBaseURL.replace(/\/+$/, '');
+  if (!rawBaseURL.endsWith('/api')) {
+    rawBaseURL = `${rawBaseURL}/api`;
+  }
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: rawBaseURL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
