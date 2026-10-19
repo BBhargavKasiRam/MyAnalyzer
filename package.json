@@ -1,0 +1,27 @@
+{
+  "name": "myanalyzer-competitive-programming-tracker",
+  "version": "1.0.0",
+  "description": "Multi-Platform Competitive Programming Activity Tracker & Heatmap (MERN Stack) for Codeforces, LeetCode, and CodeChef",
+  "main": "server/server.js",
+  "scripts": {
+    "server": "node server/server.js",
+    "client": "npm --prefix client run dev",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "build:client": "npm --prefix client run build",
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "start": "node server/server.js"
+  },
+  "keywords": [
+    "competitive-programming",
+    "codeforces",
+    "leetcode",
+    "codechef",
+    "heatmap",
+    "mern"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
