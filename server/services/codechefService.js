@@ -152,12 +152,21 @@ async function fetchCodeChefData(handle) {
     }
 
     const problems = Array.from(problemsMap.values());
-    console.log(`[CodeChef] Fetched ${problems.length} solved problems and ${baselineList.length} baseline days for "${cleanHandle}"`);
+
+    // Extract Total Problems Solved from profile HTML (e.g. "Total Problems Solved: 150")
+    let totalSolved = problems.length;
+    const totalMatch = profileHtml.match(/Total Problems Solved:\s*(\d+)/i);
+    if (totalMatch) {
+      totalSolved = Math.max(parseInt(totalMatch[1], 10), problems.length);
+    }
+
+    console.log(`[CodeChef] Fetched ${problems.length} solved problems (all-time total: ${totalSolved}) and ${baselineList.length} baseline days for "${cleanHandle}"`);
 
     return {
       success: true,
       problems,
-      baseline: baselineList
+      baseline: baselineList,
+      totalSolved
     };
   } catch (error) {
     const errMsg = error.message;

@@ -18,6 +18,12 @@ async function fetchLeetCodeData(handle) {
   const query = `
     query getUserProfile($username: String!) {
       matchedUser(username: $username) {
+        submitStatsGlobal {
+          acSubmissionNum {
+            difficulty
+            count
+          }
+        }
         userCalendar {
           submissionCalendar
         }
@@ -112,12 +118,18 @@ async function fetchLeetCodeData(handle) {
       platform: 'LeetCode'
     }));
 
-    console.log(`[LeetCode] Fetched ${problems.length} recent AC problems and ${baseline.length} calendar baseline days for "${cleanHandle}"`);
+    // 3. Extract all-time official total solved count from submitStatsGlobal
+    const statsGlobal = data.matchedUser?.submitStatsGlobal?.acSubmissionNum || [];
+    const allItem = statsGlobal.find(item => item.difficulty === 'All');
+    const totalSolved = allItem ? Number(allItem.count) : problems.length;
+
+    console.log(`[LeetCode] Fetched ${problems.length} recent AC problems, official all-time solved: ${totalSolved}, and ${baseline.length} calendar baseline days for "${cleanHandle}"`);
 
     return {
       success: true,
       problems,
-      baseline
+      baseline,
+      totalSolved
     };
   } catch (error) {
     const errMsg = error.response?.data?.errors?.[0]?.message || error.message;

@@ -56,6 +56,9 @@ async function syncUserData(userOrId, force = false) {
     }
   }
 
+  let lcOfficialTotal = 0;
+  let ccOfficialTotal = 0;
+
   // Process Codeforces
   if (cfResult.status === 'fulfilled' && cfResult.value.success) {
     allProblems.push(...cfResult.value.problems);
@@ -66,6 +69,7 @@ async function syncUserData(userOrId, force = false) {
   // Process LeetCode
   if (lcResult.status === 'fulfilled' && lcResult.value.success) {
     allProblems.push(...lcResult.value.problems);
+    lcOfficialTotal = lcResult.value.totalSolved || 0;
     // Merge LeetCode baseline
     for (const item of lcResult.value.baseline) {
       const existing = newBaselineMap.get(item.date);
@@ -79,6 +83,7 @@ async function syncUserData(userOrId, force = false) {
   // Process CodeChef
   if (ccResult.status === 'fulfilled' && ccResult.value.success) {
     allProblems.push(...ccResult.value.problems);
+    ccOfficialTotal = ccResult.value.totalSolved || 0;
     // Merge CodeChef baseline
     for (const item of ccResult.value.baseline) {
       const existing = newBaselineMap.get(item.date);
@@ -158,14 +163,19 @@ async function syncUserData(userOrId, force = false) {
   // Calculate streaks
   const { currentStreak, longestStreak } = calculateStreaks(dailyCountMap);
 
+  // Reconcile official all-time platform totals with indexed counts
+  const cfFinal = cfCount;
+  const lcFinal = Math.max(lcOfficialTotal, lcCount, user.stats?.leetcodeSolved || 0);
+  const ccFinal = Math.max(ccOfficialTotal, ccCount, user.stats?.codechefSolved || 0);
+
   // Total unique problems solved
-  const totalSolved = cfCount + lcCount + ccCount;
+  const totalSolved = cfFinal + lcFinal + ccFinal;
 
   user.stats = {
     totalSolved,
-    codeforcesSolved: cfCount,
-    leetcodeSolved: lcCount,
-    codechefSolved: ccCount,
+    codeforcesSolved: cfFinal,
+    leetcodeSolved: lcFinal,
+    codechefSolved: ccFinal,
     currentStreak,
     longestStreak,
     lastSyncedAt: now
