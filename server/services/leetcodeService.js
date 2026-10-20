@@ -3,6 +3,34 @@ const { toISTDateString } = require('../utils/dateUtils');
 
 const LEETCODE_GRAPHQL_URL = 'https://leetcode.com/graphql';
 
+// In-memory cache for LeetCode question difficulties to minimize API calls
+const difficultyCache = new Map();
+
+async function getQuestionDifficulty(titleSlug) {
+  if (difficultyCache.has(titleSlug)) {
+    return difficultyCache.get(titleSlug);
+  }
+  try {
+    const qQuery = `query qDiff($titleSlug: String!) { question(titleSlug: $titleSlug) { difficulty } }`;
+    const res = await axios.post(
+      LEETCODE_GRAPHQL_URL,
+      { query: qQuery, variables: { titleSlug } },
+      {
+        timeout: 6000,
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      }
+    );
+    const diff = res.data?.data?.question?.difficulty || 'Medium';
+    difficultyCache.set(titleSlug, diff);
+    return diff;
+  } catch (err) {
+    return 'Medium';
+  }
+}
+
 /**
  * Fetches solved problems and historical calendar baseline from LeetCode
  * @param {string} handle - LeetCode username
@@ -63,8 +91,18 @@ async function fetchLeetCodeData(handle) {
       };
     }
 
-    // 1. Process recent AC submissions
+    // 1. Process recent AC submissions with real difficulty ratings
     const recentSubmissions = data.recentAcSubmissionList || [];
+    const uniqueSlugs = [...new Set(recentSubmissions.map(s => s.titleSlug).filter(Boolean))];
+    const difficultyMap = new Map();
+
+    await Promise.all(
+      uniqueSlugs.map(async (slug) => {
+        const diff = await getQuestionDifficulty(slug);
+        difficultyMap.set(slug, diff);
+      })
+    );
+
     const uniqueProblemsMap = new Map();
 
     for (const sub of recentSubmissions) {
@@ -75,13 +113,14 @@ async function fetchLeetCodeData(handle) {
         const timestampMs = Number(sub.timestamp) * 1000;
         const solvedAt = new Date(timestampMs);
         const dateString = toISTDateString(solvedAt);
+        const difficulty = difficultyMap.get(sub.titleSlug) || 'Medium';
 
         uniqueProblemsMap.set(problemId, {
           platform: 'LeetCode',
           problemId,
           title: sub.title || sub.titleSlug,
           url: `https://leetcode.com/problems/${sub.titleSlug}/`,
-          difficulty: 'Accepted',
+          difficulty,
           solvedAt,
           dateString
         });

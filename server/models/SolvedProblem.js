@@ -28,6 +28,10 @@ const SolvedProblemSchema = new mongoose.Schema({
     type: String,
     default: 'Unrated'
   },
+  points: {
+    type: Number,
+    default: 15
+  },
   solvedAt: {
     type: Date,
     required: true // UTC timestamp of first Accepted submission

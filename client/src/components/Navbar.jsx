@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Users, Trophy, Code2, UserPlus, Settings, Sparkles } from 'lucide-react';
+import { Activity, Users, Trophy, Code2, UserPlus, Settings, Sparkles, RefreshCw } from 'lucide-react';
 
 export default function Navbar({
   users = [],
@@ -8,7 +8,9 @@ export default function Navbar({
   activeTab,
   setActiveTab,
   onOpenAddUser,
-  onOpenEditUser
+  onOpenEditUser,
+  onSyncAll,
+  isSyncingAll
 }) {
   return (
     <header className="sticky top-0 z-40 bg-[#090d16]/90 backdrop-blur-xl border-b border-slate-800/80">
@@ -80,8 +82,20 @@ export default function Navbar({
             </button>
           </nav>
 
-          {/* Right Controls: User Switcher & Add User */}
+          {/* Right Controls: User Switcher, Sync All & Add User */}
           <div className="flex items-center gap-2.5">
+            {users.length > 0 && (
+              <button
+                onClick={onSyncAll}
+                disabled={isSyncingAll}
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 flex items-center gap-1.5 transition shadow-sm"
+                title="Sync and update data for all friends from Codeforces, LeetCode, and CodeChef"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAll ? 'animate-spin text-emerald-400' : 'text-slate-400'}`} />
+                <span className="hidden sm:inline">{isSyncingAll ? 'Updating...' : 'Sync All'}</span>
+              </button>
+            )}
+
             {users.length > 0 && activeUser && (
               <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs">
                 <select

@@ -49,8 +49,21 @@ export const deleteUser = async (id) => {
 };
 
 // Sync
-export const syncUser = async (id, force = false) => {
-  const res = await api.post(`/users/${id}/sync${force ? '?force=true' : ''}`);
+export const syncUser = async (id, force = true) => {
+  const res = await api.post(`/users/${id}/sync${force ? '?force=true' : '?force=false'}`);
+  return res.data;
+};
+
+export const syncAllUsers = async () => {
+  const res = await api.post('/users/sync-all');
+  return res.data;
+};
+
+// Comparison Analytics (Daily, Weekly, Monthly)
+export const getComparisonData = async (period = 'week', userIds = '') => {
+  const params = { period };
+  if (userIds) params.userIds = userIds;
+  const res = await api.get('/comparison', { params });
   return res.data;
 };
 

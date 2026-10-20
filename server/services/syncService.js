@@ -4,8 +4,9 @@ const { fetchCodeforcesProblems } = require('./codeforcesService');
 const { fetchLeetCodeData } = require('./leetcodeService');
 const { fetchCodeChefData } = require('./codechefService');
 const { toISTDateString, getPastDaysIST, calculateStreaks } = require('../utils/dateUtils');
+const { calculateProblemPoints } = require('../utils/scoringUtils');
 
-const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+const COOLDOWN_MS = 30 * 1000; // 30 seconds cooldown for automated calls
 
 /**
  * Synchronizes competitive programming data for a given user from all platforms
@@ -110,9 +111,12 @@ async function syncUserData(userOrId, force = false) {
             problemId: prob.problemId,
             title: prob.title,
             url: prob.url,
-            difficulty: prob.difficulty || 'Unrated',
             solvedAt: prob.solvedAt,
             dateString: prob.dateString
+          },
+          $set: {
+            difficulty: prob.difficulty || 'Unrated',
+            points: calculateProblemPoints(prob.platform, prob.difficulty || 'Unrated')
           }
         },
         upsert: true
@@ -267,6 +271,7 @@ async function getUserHeatmapData(userId) {
         title: p.title,
         problemId: p.problemId,
         difficulty: p.difficulty,
+        points: p.points || calculateProblemPoints(p.platform, p.difficulty),
         url: p.url,
         solvedAt: p.solvedAt
       }))

@@ -53,27 +53,18 @@ export default function StatsOverview({ user, onSync, isSyncing, syncError }) {
 
         {/* Sync Controls */}
         <div className="flex items-center gap-3 self-start md:self-auto flex-wrap">
-          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={forceSync}
-              onChange={(e) => setForceSync(e.target.checked)}
-              className="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
-            />
-            <span>Bypass 5m cooldown</span>
-          </label>
-
           <button
-            onClick={() => onSync(forceSync)}
+            onClick={() => onSync(true)}
             disabled={isSyncing}
             className={`px-4 py-2.5 rounded-xl font-medium text-xs flex items-center gap-2 transition shadow-md ${
               isSyncing
                 ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
-                : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20 font-semibold'
+                : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20 font-semibold cursor-pointer'
             }`}
+            title="Fetch live updates from Codeforces, LeetCode, and CodeChef immediately"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-400' : ''}`} />
-            <span>{isSyncing ? 'Syncing Platforms...' : 'Sync Now'}</span>
+            <span>{isSyncing ? 'Fetching Latest Problems...' : 'Sync Now'}</span>
           </button>
         </div>
       </div>

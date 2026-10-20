@@ -148,6 +148,11 @@ export default function DayDetailModal({ dayData, isOpen, onClose }) {
                         {prob.difficulty}
                       </span>
                     )}
+                    {prob.points && (
+                      <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-mono">
+                        +{prob.points} pts
+                      </span>
+                    )}
                   </div>
                   <h4 className="text-sm font-semibold text-slate-100 group-hover:text-emerald-300 transition truncate">
                     {prob.title}

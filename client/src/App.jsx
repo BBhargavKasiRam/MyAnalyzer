@@ -6,7 +6,7 @@ import ProblemsList from './components/ProblemsList';
 import CompareView from './components/CompareView';
 import Leaderboard from './components/Leaderboard';
 import UserModal from './components/UserModal';
-import { getUsers, getUserHeatmap, syncUser, getHealth } from './api';
+import { getUsers, getUserHeatmap, syncUser, syncAllUsers, getHealth } from './api';
 import { Activity, UserPlus, AlertTriangle, Sparkles, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
@@ -17,6 +17,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [heatmapLoading, setHeatmapLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncError, setSyncError] = useState('');
   const [dbStatus, setDbStatus] = useState('connected');
 
@@ -82,7 +83,30 @@ export default function App() {
 
   useEffect(() => {
     checkHealth();
-    loadUsers();
+    // Fetch users and automatically trigger live background sync on page entry
+    getUsers()
+      .then((userList) => {
+        setUsers(userList);
+        if (userList.length > 0) {
+          const firstUser = userList[0];
+          setActiveUser(firstUser);
+          setLoading(false);
+
+          // Auto-sync fresh data on website visit
+          syncUser(firstUser._id, true)
+            .then(() => {
+              loadUsers(firstUser._id);
+              loadHeatmap(firstUser._id);
+            })
+            .catch((e) => console.warn('Auto-sync notice:', e.message));
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching users on load:', err);
+        setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -91,26 +115,39 @@ export default function App() {
     }
   }, [activeUser?._id, loadHeatmap]);
 
-  // Sync handler
-  const handleSync = async (force = false) => {
+  // Sync handler (always forces fresh sync on button click)
+  const handleSync = async () => {
     if (!activeUser?._id) return;
     setIsSyncing(true);
     setSyncError('');
 
     try {
-      const result = await syncUser(activeUser._id, force);
-      if (result.cooldown) {
-        setSyncError(result.message);
-      } else {
-        // Reload users and active heatmap
-        await loadUsers(activeUser._id);
-        await loadHeatmap(activeUser._id);
-      }
+      const result = await syncUser(activeUser._id, true);
+      await loadUsers(activeUser._id);
+      await loadHeatmap(activeUser._id);
     } catch (err) {
       const msg = err.response?.data?.message || err.response?.data?.error || err.message || 'Sync failed';
       setSyncError(msg);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Sync all users handler
+  const handleSyncAll = async () => {
+    setIsSyncingAll(true);
+    setSyncError('');
+
+    try {
+      await syncAllUsers();
+      await loadUsers(activeUser?._id);
+      if (activeUser?._id) {
+        await loadHeatmap(activeUser._id);
+      }
+    } catch (err) {
+      console.error('Error syncing all users:', err);
+    } finally {
+      setIsSyncingAll(false);
     }
   };
 
@@ -156,6 +193,8 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenAddUser={handleOpenAddUser}
         onOpenEditUser={handleOpenEditUser}
+        onSyncAll={handleSyncAll}
+        isSyncingAll={isSyncingAll}
       />
 
       {/* Main Content Area */}
@@ -236,7 +275,7 @@ export default function App() {
             )}
 
             {activeTab === 'compare' && (
-              <CompareView users={users} />
+              <CompareView users={users} onUserUpdated={loadUsers} />
             )}
 
             {activeTab === 'leaderboard' && (

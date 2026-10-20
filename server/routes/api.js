@@ -3,7 +3,8 @@ const router = express.Router();
 const User = require('../models/User');
 const SolvedProblem = require('../models/SolvedProblem');
 const { syncUserData, getUserHeatmapData } = require('../services/syncService');
-const { getTodayIST } = require('../utils/dateUtils');
+const { getTodayIST, getPastDaysIST } = require('../utils/dateUtils');
+const { calculateProblemPoints, getDifficultyTier } = require('../utils/scoringUtils');
 
 /**
  * GET /api/health
@@ -166,11 +167,11 @@ router.delete('/users/:id', async (req, res) => {
 
 /**
  * POST /api/users/:id/sync
- * Trigger a live fetch from all 3 platforms (5-min cooldown unless ?force=true)
+ * Trigger a live fetch from all 3 platforms (immediate sync by default)
  */
 router.post('/users/:id/sync', async (req, res) => {
   try {
-    const force = req.query.force === 'true';
+    const force = req.query.force !== 'false'; // default to true so manual updates are immediate
     const result = await syncUserData(req.params.id, force);
 
     if (result.cooldown) {
@@ -180,6 +181,230 @@ router.post('/users/:id/sync', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('[API] Sync error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/users/sync-all
+ * Trigger live synchronization for all registered users
+ */
+router.post('/users/sync-all', async (req, res) => {
+  try {
+    const users = await User.find({});
+    const results = [];
+
+    for (const u of users) {
+      try {
+        const resObj = await syncUserData(u, true);
+        results.push(resObj.user);
+      } catch (syncErr) {
+        console.warn(`[SyncAll] Error syncing user ${u.username}:`, syncErr.message);
+        results.push(u);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully synchronized ${results.length} users`,
+      users: results
+    });
+  } catch (error) {
+    console.error('[API] Sync all error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/comparison
+ * Returns comparative metrics, point calculations, and timeline for daily, weekly, or monthly analysis
+ * Query params:
+ *   - period: 'day' | 'week' | 'month' | 'all' (default: 'week')
+ *   - userIds: optional comma-separated IDs
+ */
+router.get('/comparison', async (req, res) => {
+  try {
+    const period = req.query.period || 'week'; // 'day' | 'week' | 'month' | 'all'
+    const today = getTodayIST();
+
+    // Determine target dates
+    let targetDates = [];
+    if (period === 'day') {
+      targetDates = [today];
+    } else if (period === 'week') {
+      targetDates = getPastDaysIST(7);
+    } else if (period === 'month') {
+      targetDates = getPastDaysIST(30);
+    } else {
+      targetDates = getPastDaysIST(365);
+    }
+
+    // Determine users to compare
+    let userQuery = {};
+    if (req.query.userIds) {
+      const ids = req.query.userIds.split(',').map(s => s.trim()).filter(Boolean);
+      if (ids.length > 0) {
+        userQuery._id = { $in: ids };
+      }
+    }
+
+    const users = await User.find(userQuery).lean();
+    if (users.length === 0) {
+      return res.json({ period, dates: targetDates, users: [] });
+    }
+
+    const targetUserIds = users.map(u => u._id);
+
+    // Fetch problems solved by these users in the date range
+    const problemFilter = { userId: { $in: targetUserIds } };
+    if (period !== 'all') {
+      problemFilter.dateString = { $in: targetDates };
+    }
+
+    const problems = await SolvedProblem.find(problemFilter)
+      .sort({ solvedAt: -1 })
+      .lean();
+
+    // Group problems by user
+    const problemsByUser = new Map();
+    for (const u of users) {
+      problemsByUser.set(u._id.toString(), []);
+    }
+    for (const p of problems) {
+      const uId = p.userId.toString();
+      if (problemsByUser.has(uId)) {
+        problemsByUser.get(uId).push(p);
+      }
+    }
+
+    const userComparisonList = users.map(user => {
+      const uId = user._id.toString();
+      const userProblems = problemsByUser.get(uId) || [];
+
+      // Map baseline counts
+      const baselineMap = new Map();
+      if (Array.isArray(user.heatmapBaseline)) {
+        for (const b of user.heatmapBaseline) {
+          if (b.date && b.count > 0) {
+            baselineMap.set(b.date, b);
+          }
+        }
+      }
+
+      // Group user problems by date
+      const byDate = new Map();
+      for (const p of userProblems) {
+        if (!byDate.has(p.dateString)) {
+          byDate.set(p.dateString, []);
+        }
+        byDate.get(p.dateString).push(p);
+      }
+
+      let totalPoints = 0;
+      let totalProblemsCount = 0;
+
+      const breakdown = {
+        easy: { count: 0, points: 0 },
+        medium: { count: 0, points: 0 },
+        hard: { count: 0, points: 0 }
+      };
+
+      const platformBreakdown = {
+        Codeforces: { count: 0, points: 0 },
+        LeetCode: { count: 0, points: 0 },
+        CodeChef: { count: 0, points: 0 }
+      };
+
+      // Process individual problems
+      for (const p of userProblems) {
+        const pts = p.points || calculateProblemPoints(p.platform, p.difficulty);
+        const tier = getDifficultyTier(p.platform, p.difficulty);
+
+        totalPoints += pts;
+        totalProblemsCount++;
+
+        if (tier === 'Easy') {
+          breakdown.easy.count++;
+          breakdown.easy.points += pts;
+        } else if (tier === 'Hard') {
+          breakdown.hard.count++;
+          breakdown.hard.points += pts;
+        } else {
+          breakdown.medium.count++;
+          breakdown.medium.points += pts;
+        }
+
+        if (platformBreakdown[p.platform]) {
+          platformBreakdown[p.platform].count++;
+          platformBreakdown[p.platform].points += pts;
+        }
+      }
+
+      // Compute daily timeline for charts
+      const dailyTimeline = targetDates.map(dateStr => {
+        const dayProbs = byDate.get(dateStr) || [];
+        let dayPts = 0;
+        for (const dp of dayProbs) {
+          dayPts += dp.points || calculateProblemPoints(dp.platform, dp.difficulty);
+        }
+
+        let dayCount = dayProbs.length;
+
+        // Check baseline for days without recorded problem details
+        const b = baselineMap.get(dateStr);
+        if (b && b.count > dayCount) {
+          const extra = b.count - dayCount;
+          const extraPts = extra * 15; // standard baseline points
+          dayPts += extraPts;
+          totalPoints += extraPts;
+          totalProblemsCount += extra;
+          dayCount = b.count;
+        }
+
+        return {
+          date: dateStr,
+          points: dayPts,
+          count: dayCount
+        };
+      });
+
+      return {
+        userId: user._id,
+        username: user.username,
+        handles: user.handles,
+        totalPoints,
+        problemCount: totalProblemsCount,
+        breakdown,
+        platformBreakdown,
+        dailyTimeline,
+        recentProblems: userProblems.slice(0, 10).map(p => ({
+          _id: p._id,
+          title: p.title,
+          platform: p.platform,
+          difficulty: p.difficulty,
+          points: p.points || calculateProblemPoints(p.platform, p.difficulty),
+          url: p.url,
+          solvedAt: p.solvedAt,
+          dateString: p.dateString
+        }))
+      };
+    });
+
+    // Sort by totalPoints descending
+    userComparisonList.sort((a, b) => b.totalPoints - a.totalPoints);
+
+    // Assign ranks
+    userComparisonList.forEach((u, idx) => {
+      u.rank = idx + 1;
+    });
+
+    res.json({
+      period,
+      dates: targetDates,
+      users: userComparisonList
+    });
+  } catch (error) {
+    console.error('[API] Comparison error:', error);
     res.status(500).json({ error: error.message });
   }
 });
