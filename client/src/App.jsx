@@ -281,6 +281,7 @@ export default function App() {
             {activeTab === 'leaderboard' && (
               <Leaderboard
                 users={users}
+                activeUser={activeUser}
                 onSelectUser={(u) => {
                   setActiveUser(u);
                   setActiveTab('heatmap');

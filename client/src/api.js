@@ -80,8 +80,9 @@ export const getUserProblems = async (id, params = {}) => {
 };
 
 // Leaderboard
-export const getLeaderboard = async (sortBy = 'totalSolved') => {
-  const res = await api.get(`/leaderboard?sortBy=${sortBy}`);
+export const getLeaderboard = async (params = {}) => {
+  const query = typeof params === 'string' ? { sortBy: params } : params;
+  const res = await api.get('/leaderboard', { params: query });
   return res.data;
 };
 

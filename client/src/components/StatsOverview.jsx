@@ -79,7 +79,22 @@ export default function StatsOverview({ user, onSync, isSyncing, syncError }) {
       )}
 
       {/* Primary KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Points */}
+        <div className="bg-[#0f172a]/90 border border-slate-800 rounded-2xl p-5 relative overflow-hidden group hover:border-amber-500/40 transition">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Points</span>
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
+            </div>
+          </div>
+          <div className="text-3xl font-extrabold text-amber-400 font-mono">
+            {stats.totalPoints || 0}
+          </div>
+          <p className="text-xs text-slate-400 mt-2">Weighted by problem difficulty</p>
+          <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none"></div>
+        </div>
+
         {/* Total Solved */}
         <div className="bg-[#0f172a]/90 border border-slate-800 rounded-2xl p-5 relative overflow-hidden group hover:border-slate-700 transition">
           <div className="flex items-center justify-between mb-3">

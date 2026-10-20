@@ -175,7 +175,25 @@ async function syncUserData(userOrId, force = false) {
   // Total unique problems solved
   const totalSolved = cfFinal + lcFinal + ccFinal;
 
+  // Aggregate total points from SolvedProblem
+  const pointsAgg = await SolvedProblem.aggregate([
+    { $match: { userId: user._id } },
+    { $group: { _id: null, totalPoints: { $sum: '$points' } } }
+  ]);
+  const indexedPoints = pointsAgg[0]?.totalPoints || 0;
+
+  // Account for baseline questions (estimated 15 pts each)
+  let baselineBonusPoints = 0;
+  if (lcFinal > lcCount) {
+    baselineBonusPoints += (lcFinal - lcCount) * 15;
+  }
+  if (ccFinal > ccCount) {
+    baselineBonusPoints += (ccFinal - ccCount) * 15;
+  }
+  const totalPoints = indexedPoints + baselineBonusPoints;
+
   user.stats = {
+    totalPoints,
     totalSolved,
     codeforcesSolved: cfFinal,
     leetcodeSolved: lcFinal,

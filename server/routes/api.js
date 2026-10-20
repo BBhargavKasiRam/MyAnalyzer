@@ -470,20 +470,185 @@ router.get('/users/:id/problems', async (req, res) => {
 
 /**
  * GET /api/leaderboard
- * Rank all registered users
+ * Rank all registered users based on points earned during a time period (day, week, month, all)
+ * Query parameters:
+ *   - period: 'day' | 'week' | 'month' | 'all' (default: 'week')
+ *   - sortBy: 'points' | 'problems' | 'streak' (default: 'points')
  */
 router.get('/leaderboard', async (req, res) => {
   try {
-    const sortBy = req.query.sortBy || 'totalSolved';
-    const sortField = `stats.${sortBy}`;
+    const period = req.query.period || 'week'; // 'day' | 'week' | 'month' | 'all'
+    const sortBy = req.query.sortBy || 'points'; // 'points' | 'problems' | 'streak'
+    const today = getTodayIST();
 
-    const users = await User.find()
-      .sort({ [sortField]: -1, createdAt: 1 })
-      .select('username handles stats createdAt')
+    // Determine target dates
+    let targetDates = [];
+    if (period === 'day') {
+      targetDates = [today];
+    } else if (period === 'week') {
+      targetDates = getPastDaysIST(7);
+    } else if (period === 'month') {
+      targetDates = getPastDaysIST(30);
+    } else {
+      targetDates = getPastDaysIST(365);
+    }
+
+    const users = await User.find({}).lean();
+    if (users.length === 0) {
+      return res.json({ period, sortBy, totalUsers: 0, leaderboard: [] });
+    }
+
+    const userIds = users.map(u => u._id);
+
+    // Fetch problems solved by these users in the date range
+    const problemFilter = { userId: { $in: userIds } };
+    if (period !== 'all') {
+      problemFilter.dateString = { $in: targetDates };
+    }
+
+    const problems = await SolvedProblem.find(problemFilter)
+      .sort({ solvedAt: -1 })
       .lean();
 
-    res.json(users);
+    // Group problems by user
+    const problemsByUser = new Map();
+    for (const u of users) {
+      problemsByUser.set(u._id.toString(), []);
+    }
+    for (const p of problems) {
+      const uId = p.userId.toString();
+      if (problemsByUser.has(uId)) {
+        problemsByUser.get(uId).push(p);
+      }
+    }
+
+    const rankedUsers = users.map(user => {
+      const uId = user._id.toString();
+      const userProblems = problemsByUser.get(uId) || [];
+
+      // Map baseline counts
+      const baselineMap = new Map();
+      if (Array.isArray(user.heatmapBaseline)) {
+        for (const b of user.heatmapBaseline) {
+          if (b.date && b.count > 0) {
+            baselineMap.set(b.date, b);
+          }
+        }
+      }
+
+      let periodPoints = 0;
+      let periodProblemCount = userProblems.length;
+
+      const breakdown = {
+        easy: { count: 0, points: 0 },
+        medium: { count: 0, points: 0 },
+        hard: { count: 0, points: 0 }
+      };
+
+      const platformBreakdown = {
+        Codeforces: { count: 0, points: 0 },
+        LeetCode: { count: 0, points: 0 },
+        CodeChef: { count: 0, points: 0 }
+      };
+
+      for (const p of userProblems) {
+        const pts = p.points || calculateProblemPoints(p.platform, p.difficulty);
+        const tier = getDifficultyTier(p.platform, p.difficulty);
+
+        periodPoints += pts;
+
+        if (tier === 'Easy') {
+          breakdown.easy.count++;
+          breakdown.easy.points += pts;
+        } else if (tier === 'Hard') {
+          breakdown.hard.count++;
+          breakdown.hard.points += pts;
+        } else {
+          breakdown.medium.count++;
+          breakdown.medium.points += pts;
+        }
+
+        if (platformBreakdown[p.platform]) {
+          platformBreakdown[p.platform].count++;
+          platformBreakdown[p.platform].points += pts;
+        }
+      }
+
+      // If period is 'all', also factor in all-time official totals
+      if (period === 'all') {
+        const officialTotal = user.stats?.totalSolved || periodProblemCount;
+        if (officialTotal > periodProblemCount) {
+          const extra = officialTotal - periodProblemCount;
+          periodPoints += extra * 15;
+          periodProblemCount = officialTotal;
+        }
+      } else {
+        // Account for baseline days in targetDates
+        for (const dateStr of targetDates) {
+          const recordedCount = userProblems.filter(p => p.dateString === dateStr).length;
+          const b = baselineMap.get(dateStr);
+          if (b && b.count > recordedCount) {
+            const extra = b.count - recordedCount;
+            periodPoints += extra * 15;
+            periodProblemCount += extra;
+          }
+        }
+      }
+
+      return {
+        _id: user._id,
+        username: user.username,
+        handles: user.handles,
+        stats: user.stats,
+        periodPoints,
+        periodProblemCount,
+        breakdown,
+        platformBreakdown,
+        currentStreak: user.stats?.currentStreak || 0,
+        longestStreak: user.stats?.longestStreak || 0,
+        allTimeSolved: user.stats?.totalSolved || 0,
+        allTimePoints: user.stats?.totalPoints || periodPoints
+      };
+    });
+
+    // Sort by requested criterion
+    if (sortBy === 'problems') {
+      rankedUsers.sort((a, b) => b.periodProblemCount - a.periodProblemCount || b.periodPoints - a.periodPoints);
+    } else if (sortBy === 'streak') {
+      rankedUsers.sort((a, b) => b.currentStreak - a.currentStreak || b.periodPoints - a.periodPoints);
+    } else {
+      // Default: sort by points
+      rankedUsers.sort((a, b) => b.periodPoints - a.periodPoints || b.periodProblemCount - a.periodProblemCount);
+    }
+
+    // Assign ranks and calculate point gaps (distance to leader / next rank)
+    const topPoints = rankedUsers.length > 0 ? rankedUsers[0].periodPoints : 0;
+
+    rankedUsers.forEach((u, idx) => {
+      u.rank = idx + 1;
+      if (idx === 0) {
+        // Leader: calculate lead over #2
+        const secondPoints = rankedUsers[1] ? rankedUsers[1].periodPoints : 0;
+        u.leadOverNext = u.periodPoints - secondPoints;
+        u.behindLeader = 0;
+        u.behindNext = 0;
+      } else {
+        // Chaser: calculate gap behind leader and gap behind previous rank
+        u.behindLeader = topPoints - u.periodPoints;
+        const prevPoints = rankedUsers[idx - 1].periodPoints;
+        u.behindNext = prevPoints - u.periodPoints;
+        u.leadOverNext = 0;
+      }
+    });
+
+    res.json({
+      period,
+      sortBy,
+      totalUsers: rankedUsers.length,
+      leaderboard: rankedUsers
+    });
   } catch (error) {
+    console.error('[API] Leaderboard error:', error);
     res.status(500).json({ error: error.message });
   }
 });

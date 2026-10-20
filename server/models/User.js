@@ -46,6 +46,10 @@ const UserSchema = new mongoose.Schema({
   // Stores historical daily counts from LeetCode/CodeChef calendars
   heatmapBaseline: [HeatmapBaselineEntrySchema],
   stats: {
+    totalPoints: {
+      type: Number,
+      default: 0
+    },
     totalSolved: {
       type: Number,
       default: 0
